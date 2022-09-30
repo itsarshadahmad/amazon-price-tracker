@@ -1,36 +1,54 @@
-const nightmare = require("nightmare")()
-const sgMail = require("@sendgrid/mail")
+import nightmare from "nightmare";
+import sgMail from "@sendgrid/mail";
+import ora from "ora";
+import inquirer from "inquirer";
+import dotenv from "dotenv";
 
-require("dotenv").config()
+dotenv.config();
+const spinner = ora();
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY)
+inquirer
+    .prompt([
+        { name: "url", message: "Enter your product amazon link: " },
+        { name: "dropPrice", message: "Enter your discont price: " },
+        { name: "email", message: "Enter your email: " },
+    ])
+    .then((answers) => {
+        const URL = answers.url;
+        const DROP_PRICE = answers.dropPrice;
+        const EMAIL = answers.email;
 
-const URL = process.argv[2];
-const DROP_PRICE = process.argv[3];
-const EMAIL = process.argv[4];
-
-checkPrice(URL, DROP_PRICE, EMAIL)
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        checkPrice(URL, DROP_PRICE, EMAIL);
+    })
+    .catch((error) => {
+        throw error;
+    });
 
 async function checkPrice(url, dropPrice, receiverEmail) {
     try {
-        const priceString = await nightmare
+        spinner.start("Loading Price").color = "yellow";
+        const priceString = await nightmare()
             .goto(url)
             .wait("span .a-price-whole")
             .evaluate(() => document.querySelector(".a-price-whole").textContent)
-            .end()
+            .end();
 
-        const priceNumber = parseFloat(priceString.replace(",", ""))
-        console.log(priceNumber);
+        const priceNumber = parseFloat(priceString.replace(",", ""));
+        spinner.succeed("Price Loaded");
 
         if (priceNumber < dropPrice) {
+            spinner.start("Sending Email").color = "yellow";
             await sendEmail(
                 receiverEmail,
                 "Hurry, Price Drop!",
                 `Price dropped below Rs${dropPrice} on ${url}`
-            )
+            );
+            spinner.succeed("Email Sent");
         }
     } catch (err) {
-        throw err
+        spinner.fail();
+        throw err;
     }
 }
 
@@ -40,8 +58,7 @@ function sendEmail(receiverEmail, subject, body) {
         from: process.env.SENDER_EMAIL,
         subject: subject,
         text: body,
-        html: body
-    }
-
-    return sgMail.send(email)
+        html: body,
+    };
+    return sgMail.send(email);
 }
